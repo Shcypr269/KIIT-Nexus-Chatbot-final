@@ -12,7 +12,8 @@ from langchain.prompts import PromptTemplate
 
 load_dotenv()
 
-CHROMA_DIR = "./chroma_db"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CHROMA_DIR = os.path.join(BASE_DIR, "chroma_db")
 
 # ---------------------------------------------------------------------------
 # 28 randomized greetings for the KIITMate persona
