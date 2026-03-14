@@ -1,9 +1,7 @@
 import os
-import re
 import random
 from datetime import datetime
 from typing import Optional
-from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,24 +12,22 @@ from rag_chain import build_chain, is_greeting, is_goodbye, get_random_greeting,
 
 load_dotenv()
 
-# Global chain instance
+# Global chain instance - loaded lazily on first request
 chat_chain = None
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Load the RAG chain on startup"""
+def get_chain():
+    """Load chain on first call, reuse afterwards"""
     global chat_chain
-    print("Loading RAG chain...")
-    chat_chain, _ = build_chain()
-    print("RAG chain loaded successfully!")
-    yield
-    chat_chain = None
+    if chat_chain is None:
+        print("Loading RAG chain (first request)...")
+        chat_chain, _ = build_chain()
+        print("RAG chain loaded!")
+    return chat_chain
 
 app = FastAPI(
     title="KIIT Nexus Chatbot API",
     description="REST API for KIIT University and KIIT Nexus chatbot",
-    version="1.0.0",
-    lifespan=lifespan
+    version="1.0.0"
 )
 
 app.add_middleware(
@@ -65,8 +61,6 @@ async def root():
 
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
 async def health_check():
-    if chat_chain is None:
-        raise HTTPException(status_code=503, detail="RAG chain not loaded")
     return HealthResponse(
         status="healthy",
         message="KIIT Nexus Chatbot API is running"
@@ -92,7 +86,7 @@ async def chat(request: ChatRequest):
         )
 
     try:
-        result = chat_chain.invoke({"question": user_message})
+        result = get_chain().invoke({"question": user_message})
         response_text = result.get("answer", "I apologize, but I couldn't generate a response. Please try again.")
         source_documents = result.get("source_documents", [])
 
