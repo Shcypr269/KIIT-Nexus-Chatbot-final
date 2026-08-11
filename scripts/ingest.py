@@ -10,7 +10,6 @@ from langchain_chroma import Chroma
 from langchain_core.documents import Document
 
 load_dotenv()
-
 PROCESSED_DIR = "data/processed"
 CHROMA_DIR    = "./chroma_db"
 BATCH_SIZE    = 90
