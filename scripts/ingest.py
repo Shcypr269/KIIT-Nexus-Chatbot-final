@@ -5,23 +5,20 @@ from pathlib import Path
 from dotenv import load_dotenv
 from langchain_community.document_loaders import TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 
 load_dotenv()
 
-# Configuration
 PROCESSED_DIR = "data/processed"
 CHROMA_DIR    = "./chroma_db"
-BATCH_SIZE    = 500
+BATCH_SIZE    = 90
 
 def load_and_tag_documents():
     all_chunks = []
     processed_path = Path(PROCESSED_DIR)
 
-    # [FIX] Reduced chunk_size (600→400) and chunk_overlap (200→100)
-    # Smaller, denser chunks improve retrieval precision for FAQ-style content
     faq_splitter = RecursiveCharacterTextSplitter(
         chunk_size=600,
         chunk_overlap=120,
@@ -31,10 +28,9 @@ def load_and_tag_documents():
     processed_files = set()
     for txt_file in processed_path.rglob("*.txt"):
         if txt_file.name in processed_files:
-            print(f"  ⚠ Skipping duplicate file: {txt_file.name}")
+            print(f"Skipping duplicate file: {txt_file.name}")
             continue
         processed_files.add(txt_file.name)
-        # Default category from folder name
         folder_category = txt_file.parent.name
 
         try:
@@ -47,16 +43,14 @@ def load_and_tag_documents():
         for doc in docs:
             content = doc.page_content
 
-            # 1. Master FAQ file — split by section and tag each section correctly
             if "faq.txt" in txt_file.name.lower():
                 sections = re.split(r'={5,}\nSECTION \d+: (.*?)\n={5,}', content)
 
-                # sections[0] is file header, then (Title, Content) pairs follow
                 for i in range(1, len(sections), 2):
                     section_title   = sections[i].lower()
                     section_content = sections[i + 1]
 
-                    # Map section title → correct knowledge category
+                    # Map section title  correct knowledge category
                     if "fee" in section_title:
                         cat = "fees"
                     elif any(k in section_title for k in ["exam", "attendance", "grading"]):
@@ -71,7 +65,6 @@ def load_and_tag_documents():
                         cat = "university"
                     elif "campus" in section_title or "student life" in section_title:
                         cat = "campus"
-                    # [FIX] Societies / clubs sections belong to campus
                     elif "societ" in section_title or "club" in section_title:
                         cat = "campus"
                     elif "placement" in section_title:
@@ -93,7 +86,7 @@ def load_and_tag_documents():
                             }
                         ))
 
-            # 2. Student Handbook — tag attendance/exam chunks correctly
+            # 2. Student Handbook 
             elif "handbook" in txt_file.name.lower():
                 file_chunks = faq_splitter.split_documents([doc])
                 for chunk in file_chunks:
@@ -109,7 +102,6 @@ def load_and_tag_documents():
                     elif any(k in chunk_text for k in [
                         "library", "sports", "hostel", "health", "ksac",
                         "counselling", "placement",
-                        # [FIX] societies & clubs content belongs to campus
                         "societ", "club", "krs", "konnexion", "ieee", "gdg",
                         "mlsa", "cybervault", "aisoc", "technical club"
                     ]):
@@ -125,7 +117,7 @@ def load_and_tag_documents():
                     chunk.metadata["source"] = txt_file.name
                     all_chunks.append(chunk)
 
-            # 3. KIITEE file — split across multiple categories
+            # 3. KIITEE file
             elif "kiitee" in txt_file.name.lower():
                 file_chunks = faq_splitter.split_documents([doc])
                 for chunk in file_chunks:
@@ -167,7 +159,7 @@ def load_and_tag_documents():
                     chunk.metadata["source"]   = txt_file.name
                     all_chunks.append(chunk)
 
-            # 7. Societies — dedicated file
+            # 7. Societies 
             elif "societ" in txt_file.name.lower():
                 file_chunks = faq_splitter.split_documents([doc])
                 for chunk in file_chunks:
@@ -191,32 +183,29 @@ def load_and_tag_documents():
 
         print(f"  ✓ Processed and Meta-tagged: {txt_file.name}")
 
-    print(f"\n📂 Total chunks created: {len(all_chunks)}")
+    print(f"\nTotal chunks created: {len(all_chunks)}")
     return all_chunks
 
 
 def ingest():
     # Clear old database to prevent metadata contamination
     if os.path.exists(CHROMA_DIR):
-        print(f"🗑️  Cleaning old ChromaDB at {CHROMA_DIR}...")
+        print(f"Cleaning old ChromaDB at {CHROMA_DIR}...")
         shutil.rmtree(CHROMA_DIR)
 
     chunks = load_and_tag_documents()
 
-    print("\n⏳ Initializing Embedding Model (all-MiniLM-L6-v2)...")
-    embeddings = HuggingFaceEmbeddings(
-        model_name="all-MiniLM-L6-v2",
-        model_kwargs={"device": "cpu"}
-    )
+    print("\nInitializing Embedding Model (FastEmbed)...")
+    embeddings = FastEmbedEmbeddings()
 
     total = len(chunks)
-    print(f"⏳ Embedding {total} chunks into ChromaDB in batches of {BATCH_SIZE}...\n")
+    print(f"Embedding {total} chunks into ChromaDB in batches of {BATCH_SIZE}...\n")
 
     vectorstore = None
     for i in range(0, total, BATCH_SIZE):
         batch     = chunks[i : i + BATCH_SIZE]
         batch_num = (i // BATCH_SIZE) + 1
-        print(f"   📦 Batch {batch_num} → chunks {i + 1} to {min(i + BATCH_SIZE, total)}")
+        print(f"Batch {batch_num} → chunks {i + 1} to {min(i + BATCH_SIZE, total)}")
 
         if vectorstore is None:
             # First batch — creates the ChromaDB on disk
@@ -228,9 +217,9 @@ def ingest():
         else:
             # Subsequent batches — adds to existing ChromaDB
             vectorstore.add_documents(batch)
-
-    print(f"\n✅ Ingestion Complete! {total} chunks stored in ChromaDB.")
-    print("   Run test_retrieval.py to validate, then streamlit run streamlit_app.py")
+            
+    print(f"\nIngestion Complete! {total} chunks stored in ChromaDB.")
+    print("Run test_retrieval.py to validate, then streamlit run streamlit_app.py")
 
 
 if __name__ == "__main__":

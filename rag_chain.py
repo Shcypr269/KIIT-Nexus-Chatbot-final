@@ -3,7 +3,7 @@ import re
 import random
 from datetime import datetime
 from dotenv import load_dotenv
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.embeddings.fastembed import FastEmbedEmbeddings
 from langchain_chroma import Chroma
 from langchain_groq import ChatGroq
 from langchain.chains import ConversationalRetrievalChain
@@ -163,25 +163,24 @@ STRICT RULES:
 4. Be concise, friendly, and use bullet points for lists.
 5. "it", "they", "its" usually refer to KIIT or the subjects mentioned in Chat History.
 6. Do NOT start your answer with any greeting or self-introduction. Just answer the question directly.
-7. ALWAYS answer strictly in ENGLISH. The ONLY exception is if the user EXPLICITLY includes the exact words "in hindi" in their question. If they do not explicitly say "in hindi", you MUST answer in English.
-8. If asked "who made you", "who created you", "who built you", or similar questions about your creation, clearly state that you were created by KIIT NEXUS (the KIIT NEXUS team/founding members).
+7. ALWAYS answer strictly in ENGLISH. The ONLY exception is if the user EXPLICITLY includes the exact words "in hindi" in their question.
+
+KIIT NEXUS & BOT IDENTITY RULES (IMPORTANT):
+8. If asked "who made you", "who created you", "who built you", state that you were created by the KIIT NEXUS team.
+9. If asked about the "CEO", "Founder", "Creators", or "Heads" of KIIT NEXUS, directly state: "KIIT NEXUS was founded by Abhishek Dhal (Founder) and Aditya Vikram Singh (Co-Founder). The Technical Heads are Nishtha Mishra, Ishika Jaiswal, and Shivam." Do NOT use the "pro@kiit.ac.in" fallback for this question.
+10. KIIT NEXUS is an independent student-led community and project, NOT an official KIIT university society.
+11. NEVER mention KIIT NEXUS when answering general university questions (like KIITEE, fees, etc.) unless the user explicitly asks about KIIT NEXUS.
 
 FEE RULES (IMPORTANT):
-9. When the user asks about "fee", "fees", "cost", "charges", "price", or "how much" for ANY B.Tech programme (e.g., B.Tech CSE, Computer Science, IT), look for the fee table in the context. For example:
-   - B.Tech CSE / IT / Computer Science = Rs. 2,20,000 per semester
-   - B.Tech ECE / ETC = Rs. 2,00,000 per semester
-   - B.Tech Civil / Mechanical / Electrical = Rs. 1,75,000 per semester
-10. When asked about hostel fees, answer ONLY from the hostel fee data. Include room types, AC/Non-AC, occupancy, and mess fees.
+12. When the user asks about "fee", "fees", "cost", or "charges" for ANY B.Tech programme, look for the fee table in the context. Examples: B.Tech CSE/IT = Rs. 2,20,000 per sem, ECE = Rs. 2,00,000, Civil = Rs. 1,75,000.
+13. When asked about hostel fees, answer ONLY from the hostel fee data (room types, AC/Non-AC, mess fees).
 
 PLACEMENT RULES (IMPORTANT):
-11. When asked about "companies", "recruiters", "placements", or "which companies visit KIIT", list ALL companies mentioned in the context. Include company names like Microsoft, TCS, Oracle, Capgemini, Tech Mahindra, Amazon, Google, Goldman Sachs, etc.
-12. Always include placement statistics when available: number of companies (750+), offers (5,585+), highest CTC (51 LPA from Microsoft), and placement rate (94%).
-13. Mention school-wise placements when relevant: School of Technology (460+ companies, 3,800+ offers), School of Management (161+ companies), School of Biotechnology (96% placement), etc.
+14. When asked about "companies" or "placements", list recruiters mentioned in the context (Microsoft, TCS, Amazon, etc.) and include statistics (highest CTC 51 LPA from Microsoft, 94% placement rate).
 
 SOCIETIES RULES (IMPORTANT):
-14. "Technical societies at KIIT" or "societies at KIIT" or "clubs at KIIT" = answer about KSAC (KIIT Student Activity Centre) societies like KRS, Konnexions, IEEE, GDG, MLSA, CyberVault, AISoC, etc.
-15. "Tech domains at KIIT NEXUS" or "KIIT NEXUS domains" = answer about KIIT NEXUS project domains: Web Development, Android Development, Flutter Development, Machine Learning.
-16. KIIT NEXUS is a student-built application/chatbot — it is NOT a KIIT society. Do NOT confuse KIIT NEXUS domains with KIIT university societies.
+15. "Technical societies at KIIT" = answer about KSAC societies like KRS, Konnexions, IEEE, GDG, MLSA, etc.
+16. "Tech domains at KIIT NEXUS" = answer about KIIT NEXUS project domains (Web Dev, App Dev, ML).
 
 Context:
 {context}
@@ -201,11 +200,8 @@ Follow Up Input: {question}
 Standalone question:""")
 
 def build_chain():
-    # Load embeddings — same model used during ingestion
-    embeddings = HuggingFaceEmbeddings(
-        model_name="all-MiniLM-L6-v2",
-        model_kwargs={"device": "cpu"}
-    )
+    # Load FastEmbed embeddings
+    embeddings = FastEmbedEmbeddings()
 
     # Load ChromaDB from disk
     vectorstore = Chroma(
@@ -213,11 +209,12 @@ def build_chain():
         embedding_function=embeddings
     )
 
-    # Use similarity search with k=10 documents
+    # Use MMR (Maximal Marginal Relevance) search for better diversity
     retriever = vectorstore.as_retriever(
-        search_type="similarity",
+        search_type="mmr",
         search_kwargs={
-            "k": 10
+            "k": 10,
+            "fetch_k": 30
         }
     )
 
