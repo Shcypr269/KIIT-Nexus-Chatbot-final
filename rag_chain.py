@@ -11,7 +11,6 @@ from langchain.memory import ConversationBufferWindowMemory
 from langchain.prompts import PromptTemplate
 
 load_dotenv()
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CHROMA_DIR = os.path.join(BASE_DIR, "chroma_db")
 
